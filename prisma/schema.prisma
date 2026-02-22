@@ -1,0 +1,132 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ========== PROMO CODE SYSTEM ==========
+
+// Promo codes for unlocking unlimited access or bonus videos
+model PromoCode {
+  id           String      @id @default(cuid())
+  code         String      @unique                    // e.g., "LAUNCH2025"
+  accessType   AccessType  @default(UNLIMITED)        // bonus_videos or unlimited
+  type         PromoType   @default(UNLIMITED)        // unlimited, limited_uses, time_limited
+
+  // For limited-use codes
+  maxUses      Int?                                   // e.g., 100 for first 100 users
+  currentUses  Int         @default(0)                // How many times used
+
+  // For time-limited codes
+  expiresAt    DateTime?                              // When code expires
+
+  // Bonus videos (for BONUS_VIDEOS access type)
+  bonusVideos  Int         @default(0)                // Extra videos this code gives (e.g., 10)
+
+  // Status
+  active       Boolean     @default(true)             // Can be deactivated
+  isOwnerCode  Boolean     @default(false)            // Permanent owner code (cannot be deleted)
+
+  // Metadata
+  description  String?                                 // Admin notes about this code
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  redemptions  Redemption[]                          // Track who used this code
+
+  @@index([code])
+  @@index([active])
+}
+
+enum AccessType {
+  BONUS_VIDEOS    // Adds extra videos to daily limit (e.g., +10)
+  UNLIMITED       // Unlimited generations forever
+}
+
+enum PromoType {
+  UNLIMITED       // Unlimited uses, never expires
+  LIMITED_USES    // Limited number of redemptions
+  TIME_LIMITED    // Expires after a certain time
+}
+
+// Track which users/sessions have redeemed codes
+model Redemption {
+  id              String      @id @default(cuid())
+
+  // User identification (either logged-in user OR session)
+  userId          String?                               // If logged in with Clerk
+  sessionId       String?                               // If not logged in (localStorage ID)
+  ipAddress       String?                               // For tracking/abuse prevention
+
+  // Code redeemed
+  codeId          String
+  code            PromoCode   @relation(fields: [codeId], references: [id])
+
+  // Access status
+  accessType      AccessType  @default(UNLIMITED)        // Type of access granted
+  unlimitedAccess Boolean     @default(true)            // True if unlimited access
+  bonusVideos     Int         @default(0)               // Bonus videos granted (for BONUS_VIDEOS type)
+
+  // Metadata
+  redeemedAt      DateTime    @default(now())
+  revokedAt       DateTime?                             // If admin revokes access
+
+  @@unique([userId, codeId])                           // One redemption per user per code
+  @@unique([sessionId, codeId])                        // One redemption per session per code
+  @@index([userId])
+  @@index([sessionId])
+  @@index([codeId])
+}
+
+// Track daily usage for non-logged-in users
+model SessionUsage {
+  id              String    @id @default(cuid())
+  sessionId       String                              // Unique browser session ID
+  ipAddress       String?                             // For abuse prevention
+
+  // Daily tracking
+  date            DateTime                            // Date of usage (midnight UTC)
+  count           Int       @default(0)              // Videos generated this day
+
+  // Code redemption status (denormalized for quick lookup)
+  hasUnlimited    Boolean   @default(false)          // Has redeemed an unlimited code
+  bonusVideos     Int       @default(0)              // Total bonus videos from all codes
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([sessionId, date])                        // One record per session per day
+  @@index([sessionId])
+  @@index([date])
+}
+
+// Log all code redemption attempts (security)
+model CodeAttemptLog {
+  id              String    @id @default(cuid())
+  code            String                              // Code that was attempted
+  userId          String?                             // If logged in
+  sessionId       String?                             // If not logged in
+  ipAddress       String?                             // IP for rate limiting
+
+  success         Boolean                             // Was the code valid?
+  errorMessage    String?                             // If failed, why?
+
+  attemptedAt     DateTime  @default(now())
+
+  @@index([sessionId, attemptedAt])                  // For rate limiting
+  @@index([ipAddress, attemptedAt])                  // For rate limiting
+}
+
+// Admin settings (for storing config)
+model AdminSetting {
+  id              String    @id @default(cuid())
+  key             String    @unique                  // e.g., "owner_code_created"
+  value           String                              // The value
+  updatedAt       DateTime  @updatedAt
+}
