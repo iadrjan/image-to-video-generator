@@ -1,24 +1,47 @@
 import { NextResponse } from 'next/server';
 
+// Safe Z.ai SDK Import (Prevents TypeScript errors)
+let client: any;
+try {
+  const sdk = require('z-ai-web-dev-sdk');
+  const ZAIClient = sdk.ZAIClient || sdk.default || sdk;
+  client = new ZAIClient({
+    apiKey: process.env.Z_AI_API_KEY || '',
+  });
+} catch (e) {
+  console.error('SDK Error:', e);
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { prompt } = body;
+    const { prompt, imageUrl } = body; 
 
-    if (!prompt) return NextResponse.json({ error: 'Prompt required' }, { status: 400 });
+    console.log("Generating:", prompt);
 
-    console.log("Generating video for prompt:", prompt);
+    if (!process.env.Z_AI_API_KEY) {
+      // Mock response if you haven't added the key yet
+      return NextResponse.json({ 
+        success: true, 
+        videoUrl: "https://files.catbox.moe/2f9szw.zip",
+        message: "Mock Mode (Add API Key in Vercel)"
+      });
+    }
 
-    // SIMULATED SUCCESS
-    // Since we disabled the DB, we just return a success message.
-    // Connect your actual Z.ai SDK here later when ready.
-    return NextResponse.json({
-      success: true,
-      videoUrl: "https://files.catbox.moe/2f9szw.zip", // Placeholder link
-      message: "Video generated (Simulation Mode)"
+    // Real Generation
+    const completion = await client.video.create({
+      prompt: prompt,
+      image_url: imageUrl, 
+      duration: 5,
+    });
+
+    return NextResponse.json({ 
+      success: true, 
+      videoUrl: completion.url 
     });
 
   } catch (error) {
-    return NextResponse.json({ error: 'Server Error' }, { status: 500 });
+    console.error('Gen Error:', error);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
