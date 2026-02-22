@@ -1,11 +1,26 @@
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+interface GlobalThisWithPrisma {
+  prisma: PrismaClient | undefined;
+}
 
-export const db =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: ['query'],
-  });
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+}
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db;
+export const prisma = (() => {
+  if (process.env.DATABASE_URL) {
+    if (process.env.NODE_ENV === 'production') {
+      return new PrismaClient();
+    } else {
+      if (!global.prisma) {
+        global.prisma = new PrismaClient();
+      }
+      return global.prisma;
+    }
+  }
+  console.warn('[DB] WARNING: DATABASE_URL missing. Running in "Offline Mode".');
+  return null;
+})();
+export const db = prisma; // Export alias for compatibility

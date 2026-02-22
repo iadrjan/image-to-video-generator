@@ -6,19 +6,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { code } = body;
 
-    if (!code) {
-      return NextResponse.json({ success: false, error: 'Required' }, { status: 400 });
-    }
+    if (!code) return NextResponse.json({ success: false, error: 'No code provided.' }, { status: 400 });
 
     const result = await validatePromoCode(code);
 
     if (result.valid) {
-      return NextResponse.json({ success: true, message: 'Code Applied!' });
+      return NextResponse.json({ success: true, message: 'Promo code applied successfully!' });
     } else {
-      return NextResponse.json({ success: false, error: 'Invalid code' }, { status: 400 });
+      return NextResponse.json({ success: false, error: result.error || 'Invalid promo code.' }, { status: 400 });
     }
   } catch (error) {
-    console.error('Promo Error:', error);
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
   }
 }
